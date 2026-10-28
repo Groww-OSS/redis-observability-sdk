@@ -1,0 +1,62 @@
+name: Convert PR to Draft
+on:
+  pull_request:
+    types: [opened]
+jobs:
+  convert-to-draft:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'atlas-is-hotfix:true') }}
+    runs-on: draft-pr-runner
+    permissions:
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: 'projects/654779011655/locations/global/workloadIdentityPools/githubaction/providers/github-action'
+          service_account: 'infradev-ci-sa@mgmt-infra-applayer-01-0864.iam.gserviceaccount.com'
+          token_format: 'access_token'
+
+      - name: Login to GCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          registry: asia.gcr.io
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Generate Access Token
+        id: generate-access-token
+        run: |
+          TOKEN=$(docker run --rm \
+            -e PRIVATE_KEY="${{ secrets.GROWW_GITHUB_ACTIONS_APP_PRIVATE_KEY }}" \
+            -e APP_ID="${{ secrets.GROWW_GITHUB_ACTIONS_APP_ID }}" \
+            -e INSTALLATION_ID="${{ secrets.GROWW_GITHUB_ACTIONS_APP_INSTALLATION_ID }}" \
+            -e GITHUB_ORG="Groww" \
+            asia.gcr.io/gw-stage-management/cicd-lib-go:v3.3.12 \
+            /var/app/cicd-lib-go short-lived-token-gha)
+          echo "::add-mask::$TOKEN"
+          echo "ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+      - name: Convert PR to draft
+        env:
+          PR_NODE_ID: ${{ github.event.pull_request.node_id }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "PR is already a draft. Skipping."
+            exit 0
+          fi
+
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/graphql \
+            -d "{\"query\": \"mutation { convertPullRequestToDraft(input: { pullRequestId: \\\"$PR_NODE_ID\\\" }) { pullRequest { isDraft title } } }\"}")
+
+          echo "$RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"errors"'; then
+            echo "GraphQL mutation failed."
+            exit 1
+          fi
