@@ -1,0 +1,93 @@
+name: PR Merge Info
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master, main]
+
+jobs:
+  pr-merge-info:
+    if: github.event.pull_request.merged == true
+    runs-on: ai-runner
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Send PR + CodeRabbit summary to ingestion API
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+          PR_MERGED_AT: ${{ github.event.pull_request.merged_at }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          REPO_NAME: ${{ github.repository }}
+          REPO_SHORT_NAME: ${{ github.event.repository.name }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          API_URL: https://client-pixel.groww.in/datahub-metadata-ingestion
+          API_KEY: ${{ secrets.datahub_X_API_Key }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${API_KEY:-}" ]; then
+            echo "Missing secret datahub_X_API_Key" >&2
+            exit 1
+          fi
+
+          # Pull the "Summary by CodeRabbit" block from the PR description and
+          # flatten it: drop section headers, bold markers, and bullet markers
+          # so each line is plain text.
+          summary=$(printf '%s' "${PR_BODY:-}" \
+            | awk '/^## Summary by CodeRabbit/{f=1;next} f && /<!-- end of auto-generated comment: release notes by coderabbit.ai -->/{exit} f' \
+            | sed -E \
+                -e '/^## /d' \
+                -e '/^<!--/d' \
+                -e 's/\*\*//g' \
+                -e 's/^[[:space:]]*\*[[:space:]]+//' \
+            | awk 'NF')
+
+          payload=$(jq -n \
+            --arg pr_id "${PR_NUMBER}" \
+            --arg pr_title "${PR_TITLE:-}" \
+            --arg pr_url "${PR_URL:-}" \
+            --arg repo "${REPO_NAME}" \
+            --arg repo_name "${REPO_SHORT_NAME}" \
+            --arg repo_owner "${REPO_OWNER}" \
+            --arg branch "${BASE_BRANCH}" \
+            --arg raised_by "${PR_AUTHOR}" \
+            --arg merged_by "${PR_MERGED_BY:-}" \
+            --arg merged_at "${PR_MERGED_AT:-}" \
+            --arg coderabbit_summary "${summary:-}" \
+            '{
+              repo: $repo,
+              repo_name: $repo_name,
+              repo_owner: $repo_owner,
+              branch: $branch,
+              pr_id: $pr_id,
+              pr_title: $pr_title,
+              pr_url: $pr_url,
+              raised_by: $raised_by,
+              merged_by: $merged_by,
+              merged_at: $merged_at,
+              coderabbit_summary: $coderabbit_summary
+            }')
+
+          response_body=$(mktemp)
+          http_code=$(curl --silent --show-error --output "${response_body}" \
+            --write-out '%{http_code}' \
+            --location \
+            --header 'Content-Type: application/json' \
+            --header "X-API-Key: ${API_KEY}" \
+            --user-agent 'datahub-pr-merge-info-bot/1.0' \
+            --data "${payload}" \
+            "${API_URL}")
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "API call failed with HTTP ${http_code}" >&2
+            echo "Response body:" >&2
+            cat "${response_body}" >&2 || true
+            echo >&2
+            exit 1
+          fi
