@@ -1,0 +1,12 @@
+name: CI build
+jobs:
+  ci-sdk:
+    uses: Groww/github-wf-templates/.github/workflows/app-ci.yaml@master
+    secrets: inherit
+on:
+  pull_request:
+    types:
+      - closed
+  issue_comment:
+    types:
+      - created

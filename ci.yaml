@@ -1,0 +1,16 @@
+team: stocks-core
+org: nbt
+project-language: java21
+# SDK-only repo: single build profile routed by build-type: mvn to nbt's sdk-build
+# template (version-increment-plugin + mvn deploy). Merge to master -> release version;
+# /deploy on a PR -> <next>-PR<n>-SNAPSHOT. No image build, no deploy-properties.
+# NOTE: ci_resource_creation.yaml re-applies this file to the CI cluster on every push
+# that touches it — keep that workflow; it is the repo's nbt onboarding, not an app deploy.
+profiles:
+  default:
+    build-properties:
+      deploy: false
+      mvn-build-profile: sdk
+      build-type: mvn
+      sdk-range: "0.0.1-99.99.99"
+    deploy-properties: {}

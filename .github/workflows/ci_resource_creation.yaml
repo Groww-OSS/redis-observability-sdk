@@ -1,0 +1,11 @@
+name: CI onboarding resource creation
+
+on:
+  push:
+    paths:
+      - 'ci.yaml'
+
+jobs:
+  create_ci_resources:
+    uses: Groww/github-wf-templates/.github/workflows/create_ci_resources.yaml@master
+    secrets: inherit
