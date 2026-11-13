@@ -1,6 +1,6 @@
 team: stocks-core
 org: nbt
-project-language: java21
+project-language: java17
 # SDK-only repo: single build profile routed by build-type: mvn to nbt's sdk-build
 # template (version-increment-plugin + mvn deploy). Merge to master -> release version;
 # /deploy on a PR -> <next>-PR<n>-SNAPSHOT. No image build, no deploy-properties.
