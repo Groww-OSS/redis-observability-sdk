@@ -77,7 +77,7 @@ That is all — existing `JedisConnectionFactory` beans require no changes.
 
 ## Requirements
 
-- Java 21
+- Java 17
 - spring-data-redis 3.x and jedis 4+ (both `provided` scope — supplied by the consuming service)
 - A `MeterRegistry` bean (e.g. via `spring-boot-starter-actuator` +
   `micrometer-registry-prometheus`, or an OTLP registry)
@@ -94,7 +94,7 @@ That is all — existing `JedisConnectionFactory` beans require no changes.
 ## Building
 
 ```bash
-mvn clean install   # JDK 21
+mvn clean install   # JDK 17
 ```
 
 Publishing is via the CI `sdk` build profile (see `ci.yaml`) — merging to `master` builds and
