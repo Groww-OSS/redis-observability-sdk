@@ -61,7 +61,7 @@ Add the maven dependency:
 <dependency>
     <groupId>com.groww.infra</groupId>
     <artifactId>spring-redis-observability-sdk</artifactId>
-    <version>0.0.1</version>
+    <version>1.0.1</version>
 </dependency>
 ```
 
